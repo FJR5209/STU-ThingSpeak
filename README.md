@@ -1,136 +1,168 @@
-Monitoramento de Temperatura e Umidade com ESP8266
-Este projeto utiliza um ESP8266 para monitorar temperatura e umidade com um sensor DHT11, exibindo os dados em um LCD I2C, enviando-os ao ThingSpeak e acionando alertas via e-mail, LEDs e buzzer com base em limites configuráveis. O sistema também oferece uma interface web para ajustar os parâmetros.
-
-Funcionalidades
-Leitura do sensor: Mede temperatura e umidade a cada 2 segundos com um DHT11.
-
- Exibição no LCD: Mostra os dados do sensor e alterna com o IP a cada 10 segundos (IP visível por 5 segundos).
-
- Envio ao ThingSpeak: Envia dados de temperatura e umidade a cada 30 segundos.
-
- Alertas:
-
-
-LED Verde: Diferença de 0% a 15% em relação aos limites de temperatura ou umidade (buzzer desligado).
-
- LED Amarelo: Diferença de 16% a 20%, com buzzer a 1500 Hz por 500 ms.
-
- LED Vermelho: Diferença acima de 21%, com buzzer a 3000 Hz por 500 ms e envio de e-mail a cada 5 minutos durante a emergência.
-
-
-
-
- Relatórios: Envia um relatório por e-mail com médias a cada hora.
-
- Configuração via Web: Interface acessível pelo IP para ajustar API Key, e-mail, limites e ID do dispositivo, salvos no SPIFFS.
-
- Manutenção de Power Bank: Pulsa um pino a cada 1 segundo para evitar desligamento.
-
-Hardware Necessário
-ESP8266 (ex.: NodeMCU ou ESP-01)
-
- Sensor DHT11
-
- LCD I2C 16x2 (endereço 0x27)
-
- LEDs (verde, amarelo, vermelho)
-
- Buzzer
-
- Power bank (opcional, para alimentação)
-
- Resistores e jumpers para conexões
-
-
-
-Conexões
-Pino ESP8266
-Componente
-D1 (GPIO5)
-SDA (LCD I2C)
-D2 (GPIO4)
-SCL (LCD I2C)
-D0 (GPIO16)
-Buzzer
-D5 (GPIO14)
-DHT11
-D6 (GPIO12)
-LED Verde
-D7 (GPIO13)
-LED Amarelo
-D8 (GPIO15)
-LED Vermelho
-LED_BUILTIN
-Power Bank (opcional)
-
-Dependências
-Bibliotecas Arduino:
-
-ESP8266WiFi
-
- WiFiClient
-
- ESP8266WebServer
-
- WiFiManager (by tzapu)
-
- DHTesp (by beegee_tokyo)
-
- ESP_Mail_Client (by mobizt)
-
- Wire
-
- LiquidCrystal_I2C (by frankdebrabander)
-
-
-
-Instale essas bibliotecas via Gerenciador de Bibliotecas no Arduino IDE.
-Instalação
-
-Clone o repositório: Abra o terminal e execute: git clone https://github.com/FJR5209/STU-ThingSpeak.git 
- Configure o hardware: Conecte os componentes conforme a tabela de conexões.
-
- Instale as dependências: No Arduino IDE, vá em Sketch > Include Library > Manage Libraries e instale as bibliotecas listadas.
-
- Carregue o código: Abra main.ino no Arduino IDE. Selecione a placa ESP8266 (ex.: NodeMCU 1.0) em Tools > Board. Conecte o ESP8266 via USB e clique em Upload.
-
- Configuração inicial: O ESP8266 criará um AP chamado "ThingSpeak" com senha "esp82663". Conecte-se a esse AP e configure o Wi-Fi pelo portal. Após conectado, o IP será exibido no LCD e no Serial.
-
-
-
-Uso
-
-Monitoramento: O LCD alterna entre dados do sensor e o IP (ex.: "172.16.4.0"). LEDs e buzzer indicam o estado com base nos limites.
-
- Ajuste de parâmetros: Acesse o IP no navegador. Altere API Key, E-mail, Limite Temp, Limite Umid e ID Dispositivo. Clique em "Salvar" para persistir no SPIFFS.
-
- ThingSpeak: Configure um canal no ThingSpeak e use a API Key padrão (ILYB0ARLD1MSHWL7) ou a sua própria.
-
- E-mails: Alertas de emergência são enviados a cada 5 minutos enquanto a condição persistir (LED vermelho). Relatórios são enviados hourly para o e-mail configurado.
-
-
-
-Exemplo de Configuração
-
-Limites padrão: limiteTemp = 25, limiteUmid = 61.
-
- Verde: Temp 21.25°C a 28.75°C, Umid 51.85% a 70.15% (buzzer desligado).
-
- Amarelo: Temp 20°C a 21.24°C ou 28.76°C a 30°C, Umid 48.8% a 51.84% ou 70.16% a 73.2% (buzzer 1500 Hz).
-
- Vermelho: Temp < 20°C ou > 30°C, Umid < 48.8% ou > 73.2% (buzzer 3000 Hz).
-
-
-
-Contribuições
-
-Sinta-se à vontade para abrir issues ou pull requests no GitHub para melhorias ou correções.
-
-Licença
-
-
-
-Créditos
-
-Desenvolvido por Fredson Junior.
-
+Aqui está a documentação detalhada do código fornecido, seguindo uma estrutura clara e organizada. Ela descreve os propósitos das seções, funções e variáveis principais, bem como o funcionamento geral do sistema. A documentação é voltada para facilitar o entendimento e a manutenção do código por desenvolvedores.
+
+Documentação do Código: Monitoramento de Temperatura e Umidade com ESP8266
+Data: 21 de fevereiro de 2025
+
+Versão: 1.0
+
+Autor: [Não especificado]
+
+Plataforma: ESP8266
+
+Objetivo: Monitorar temperatura e umidade usando um sensor DHT11, exibir informações em um LCD, enviar dados para o ThingSpeak, emitir alertas via LEDs e e-mails, e permitir configuração remota via interface web.
+
+Visão Geral
+Este código implementa um sistema de monitoramento ambiental baseado no microcontrolador ESP8266. Ele utiliza um sensor DHT11 para medir temperatura e umidade, exibe os dados em um LCD I2C, controla LEDs para indicar estados (normal, alerta, emergência), aciona um buzzer em situações críticas e envia relatórios e alertas por e-mail. Os dados também são enviados periodicamente ao ThingSpeak para armazenamento na nuvem. Configurações como limites de temperatura/umidade e texto do LCD podem ser ajustadas remotamente via interface web ou WiFiManager.
+
+Bibliotecas Utilizadas
+ESP8266WiFi.h: Gerencia a conexão Wi-Fi do ESP8266.
+WiFiClient.h: Permite comunicação com servidores remotos (ex.: ThingSpeak).
+ESP8266WebServer.h: Cria um servidor web para configuração remota.
+WiFiManager.h: Facilita a configuração inicial da rede Wi-Fi.
+DHTesp.h: Interface com o sensor DHT11.
+ESP_Mail_Client.h: Envio de e-mails via SMTP.
+time.h: Sincronização de horário via NTP.
+Wire.h: Comunicação I2C para o LCD.
+LiquidCrystal_I2C.h: Controle do display LCD I2C.
+Estrutura do Código
+1. Definições de Pinos
+Definem os pinos do ESP8266 utilizados para os componentes de hardware:
+
+SDA_PIN (D1) e SCL_PIN (D2): Comunicação I2C com o LCD.
+BUZZER_PIN (D0): Controle do buzzer.
+DHT_PIN (D5): Leitura do sensor DHT11.
+LED_VERDE (D6), LED_AMARELO (D7), LED_VERMELHO (D8): Indicadores de estado.
+LED_PIN (LED_BUILTIN): Mantém o power bank ligado.
+2. Configurações de Hardware
+DHTesp dht: Instância do sensor DHT11.
+LiquidCrystal_I2C lcd: Instância do LCD I2C (endereço 0x27, 16x2).
+ESP8266WebServer server: Servidor web na porta 80.
+3. Configurações de Rede e Email
+Variáveis de configuração (armazenadas no SPIFFS):
+apiKey[20]: Chave da API do ThingSpeak.
+emailDestino[50]: E-mail do destinatário dos relatórios/alertas.
+limiteTemp[5]: Temperatura limite (em °C).
+limiteUmid[5]: Umidade limite (em %).
+idDispositivo[30]: Identificador do dispositivo.
+textoLCD[17]: Texto exibido no LCD em estado normal (máx. 16 caracteres).
+Constantes de e-mail:
+SMTP_HOST: "smtp.gmail.com".
+SMTP_PORT: Porta 465 (SSL).
+AUTHOR_EMAIL e AUTHOR_PASSWORD: Credenciais do remetente.
+4. Variáveis Globais
+SMTPSession smtp e WiFiClient client: Para envio de e-mails e comunicação HTTP.
+Controle de dados:
+somaTemperatura, somaUmidade, contadorLeituras: Calculam médias para relatórios.
+Temporizadores (unsigned long):
+ultimoEnvioThingSpeak, ultimoEnvioEmail, ultimoEnvioEmergencia, ultimaAtualizacaoLCD, etc.: Controlam intervalos de ações.
+Constantes de tempo:
+intervaloEnvioEmail: 1 hora (3.600.000 ms).
+intervaloMinimoEmergencia: 5 minutos (300.000 ms).
+intervaloAtualizacaoLCD: 10 segundos (ciclo completo).
+duracaoIP: 5 segundos (exibição do IP).
+intervaloThingSpeak: 30 segundos.
+Flags:
+mostrandoIP: Alterna entre dados e IP no LCD.
+emailConfirmacaoEnviado: Evita envio repetido de e-mail de confirmação.
+emergenciaAtiva: Indica estado de emergência ativo.
+5. Funções Principais
+carregarConfiguracoes()
+Propósito: Carrega parâmetros do arquivo /config.txt no SPIFFS.
+Comportamento: Se o arquivo não existir, define valores padrão e os salva.
+Saída: Configurações em variáveis globais.
+salvarConfiguracoes()
+Propósito: Salva as configurações atuais no SPIFFS.
+Comportamento: Sobrescreve o arquivo /config.txt com os valores das variáveis globais.
+handleRoot()
+Propósito: Gera a página HTML de configuração.
+Saída: Formulário web com campos para apiKey, emailDestino, limiteTemp, limiteUmid, idDispositivo e textoLCD.
+handleSave()
+Propósito: Processa os dados enviados pelo formulário web.
+Comportamento: Atualiza as variáveis globais e salva no SPIFFS.
+setupNTP()
+Propósito: Sincroniza o horário via NTP.
+Comportamento: Usa servidores "pool.ntp.org" e "time.nist.gov".
+enviarEmail(const char* assunto, const char* mensagem)
+Propósito: Envia e-mails via SMTP (Gmail).
+Entradas: Assunto e corpo da mensagem.
+Saída: Log no monitor serial sobre sucesso ou falha.
+enviarParaThingSpeak(float temperatura, float umidade)
+Propósito: Envia dados ao ThingSpeak via HTTP GET.
+Entradas: Temperatura e umidade atuais.
+enviarRelatorio()
+Propósito: Calcula médias e envia relatório por e-mail a cada hora.
+Comportamento: Reseta acumuladores após envio.
+enviarEmailConfirmacao()
+Propósito: Envia e-mail único ao conectar à rede.
+verificarAlertas(float temperatura, float umidade)
+Propósito: Verifica limites e atualiza LEDs, buzzer e LCD.
+Lógica:
+Calcula diferença percentual entre valores medidos e limites.
+Estados:
+Normal (≤15%): LED verde, exibe textoLCD.
+Alerta (16-20%): LED amarelo, buzzer 1500 Hz, mensagem "Alerta: Verifique".
+Emergência (>20%): LED vermelho, buzzer 3000 Hz, mensagem "Emergencia!!!", e-mail de alerta.
+Saída: Atualiza hardware e logs no serial.
+leituraSensor()
+Propósito: Lê DHT11 e atualiza LCD com valores.
+Comportamento: Valida leituras; em caso de erro, exibe "Erro Sensor".
+manterPowerBank()
+Propósito: Pulsa o pino LED_PIN para evitar desligamento do power bank.
+atualizarLCD()
+Propósito: Alterna entre exibir dados do sensor e o IP a cada 10 segundos.
+setup()
+Propósito: Inicializa hardware, Wi-Fi, servidor web e e-mail.
+Comportamento: Configura pinos, carrega parâmetros, conecta à rede via WiFiManager e inicia serviços.
+loop()
+Propósito: Executa a lógica principal em loop contínuo.
+Tarefas:
+Lê sensor a cada 2 segundos.
+Mantém power bank ativo.
+Atualiza LCD.
+Reconecta Wi-Fi se necessário.
+Envia dados ao ThingSpeak a cada 30 segundos.
+Envia relatório por e-mail a cada hora.
+Fluxo de Operação
+Inicialização (setup):
+Configura pinos e periféricos.
+Carrega configurações do SPIFFS ou define padrões.
+Conecta à rede Wi-Fi via WiFiManager.
+Inicia servidor web e sincroniza NTP.
+Loop Principal (loop):
+Lê temperatura e umidade periodicamente.
+Verifica alertas e atualiza LEDs, buzzer e LCD.
+Envia dados ao ThingSpeak e relatórios por e-mail.
+Processa requisições web para configuração.
+Configuração Remota:
+Acessível via IP do ESP8266 (ex.: 192.168.x.x).
+Permite alterar todos os parâmetros, incluindo o texto do LCD.
+Requisitos de Hardware
+ESP8266 (ex.: NodeMCU).
+Sensor DHT11 conectado ao pino D5.
+LCD I2C 16x2 (endereço 0x27) nos pinos D1 (SDA) e D2 (SCL).
+LEDs (verde, amarelo, vermelho) nos pinos D6, D7, D8.
+Buzzer no pino D0.
+Power bank (opcional, mantido via LED_BUILTIN).
+Configuração Inicial
+Instale as bibliotecas no Arduino IDE.
+Carregue o código no ESP8266.
+Conecte-se à rede "ThingSpeak" (senha: "esp82663") para configurar Wi-Fi e parâmetros iniciais.
+Acesse a interface web pelo IP exibido no LCD ou serial.
+Limitações e Observações
+LCD: Máximo de 16 caracteres para textoLCD.
+ThingSpeak: Requer conexão estável e API key válida.
+E-mail: Limite de envio do Gmail pode ser atingido em cenários de emergência frequente.
+SPIFFS: Capacidade limitada; evite configurações muito longas.
+Exemplo de Uso
+Alterar texto do LCD:
+Acesse http://<IP_do_ESP8266>/.
+No campo "Texto LCD", insira "HEMOACRE".
+Clique em "Salvar".
+O LCD exibirá "HEMOACRE" em estado normal.
+Monitoramento:
+LEDs indicam estado em tempo real.
+Relatórios são enviados por e-mail a cada hora.
+Possíveis Melhorias
+Adicionar validação mais robusta para entradas web.
+Implementar OTA (Over-The-Air) para atualizações remotas.
+Suportar múltiplos sensores ou limites configuráveis por sensor.
