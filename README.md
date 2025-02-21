@@ -1,5 +1,3 @@
-Aqui está a documentação detalhada do código fornecido, seguindo uma estrutura clara e organizada. Ela descreve os propósitos das seções, funções e variáveis principais, bem como o funcionamento geral do sistema. A documentação é voltada para facilitar o entendimento e a manutenção do código por desenvolvedores.
-
 Documentação do Código: Monitoramento de Temperatura e Umidade com ESP8266
 Data: 21 de fevereiro de 2025
 
