@@ -3,7 +3,7 @@ Data: 21 de fevereiro de 2025
 
 Versão: 1.0
 
-Autor: [Não especificado]
+Autor: Fredson Junior
 
 Plataforma: ESP8266
 
