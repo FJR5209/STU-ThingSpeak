@@ -6,7 +6,7 @@
 #include <ESP_Mail_Client.h>
 #include <time.h>
 #include <Wire.h>
-#include <LiquidCrystal_I2C.h>
+#include <LiquidCrystal_I2C.h>  //OFICIAL
 
 // --- Definições de Pinos ---
 #define SDA_PIN 5      // D1 - SDA para LCD
@@ -69,24 +69,42 @@ unsigned long ultimaManterPowerBank = 0;
 const unsigned long intervaloManterPowerBank = 1000; // 1 segundo
 const unsigned long intervaloThingSpeak = 30000; // 30 segundos
 
+// --- Função para Remover Caracteres Indesejados ---
+void limparString(char* str, size_t tamanho) {
+    for (size_t i = 0; i < tamanho; i++) {
+        if (str[i] == '\n' || str[i] == '\r') {
+            str[i] = '\0';
+            break;
+        }
+    }
+}
+
 // --- Função para Carregar Configurações do SPIFFS ---
 void carregarConfiguracoes() {
     if (!SPIFFS.begin()) {
         Serial.println("Falha ao iniciar SPIFFS");
+        lcd.setCursor(0, 0);
+        lcd.print("Erro SPIFFS     ");
+        delay(2000);
         return;
     }
     File configFile = SPIFFS.open("/config.txt", "r");
     if (configFile) {
         String line;
-        line = configFile.readStringUntil('\n'); strncpy(apiKey, line.c_str(), sizeof(apiKey) - 1); apiKey[sizeof(apiKey) - 1] = '\0';
-        line = configFile.readStringUntil('\n'); strncpy(emailDestino, line.c_str(), sizeof(emailDestino) - 1); emailDestino[sizeof(emailDestino) - 1] = '\0';
-        line = configFile.readStringUntil('\n'); strncpy(limiteTemp, line.c_str(), sizeof(limiteTemp) - 1); limiteTemp[sizeof(limiteTemp) - 1] = '\0';
-        line = configFile.readStringUntil('\n'); strncpy(limiteUmid, line.c_str(), sizeof(limiteUmid) - 1); limiteUmid[sizeof(limiteUmid) - 1] = '\0';
-        line = configFile.readStringUntil('\n'); strncpy(idDispositivo, line.c_str(), sizeof(idDispositivo) - 1); idDispositivo[sizeof(idDispositivo) - 1] = '\0';
+        line = configFile.readStringUntil('\n'); strncpy(apiKey, line.c_str(), sizeof(apiKey) - 1); apiKey[sizeof(apiKey) - 1] = '\0'; limparString(apiKey, sizeof(apiKey));
+        line = configFile.readStringUntil('\n'); strncpy(emailDestino, line.c_str(), sizeof(emailDestino) - 1); emailDestino[sizeof(emailDestino) - 1] = '\0'; limparString(emailDestino, sizeof(emailDestino));
+        line = configFile.readStringUntil('\n'); strncpy(limiteTemp, line.c_str(), sizeof(limiteTemp) - 1); limiteTemp[sizeof(limiteTemp) - 1] = '\0'; limparString(limiteTemp, sizeof(limiteTemp));
+        line = configFile.readStringUntil('\n'); strncpy(limiteUmid, line.c_str(), sizeof(limiteUmid) - 1); limiteUmid[sizeof(limiteUmid) - 1] = '\0'; limparString(limiteUmid, sizeof(limiteUmid));
+        line = configFile.readStringUntil('\n'); strncpy(idDispositivo, line.c_str(), sizeof(idDispositivo) - 1); idDispositivo[sizeof(idDispositivo) - 1] = '\0'; limparString(idDispositivo, sizeof(idDispositivo));
         configFile.close();
-        Serial.println("Configurações carregadas do SPIFFS");
+        Serial.println("Configurações carregadas do SPIFFS:");
+        Serial.println("API Key: [" + String(apiKey) + "]");
+        Serial.println("Email: [" + String(emailDestino) + "]");
+        Serial.println("Limite Temp: [" + String(limiteTemp) + "]");
+        Serial.println("Limite Umid: [" + String(limiteUmid) + "]");
+        Serial.println("ID Dispositivo: [" + String(idDispositivo) + "]");
     } else {
-        Serial.println("Nenhum arquivo de configuração encontrado, usando valores padrão");
+        Serial.println("Nenhum arquivo de configuração encontrado, mantendo valores padrão ou do WiFiManager");
     }
     SPIFFS.end();
 }
@@ -95,19 +113,30 @@ void carregarConfiguracoes() {
 void salvarConfiguracoes() {
     if (!SPIFFS.begin()) {
         Serial.println("Falha ao iniciar SPIFFS");
+        lcd.setCursor(0, 0);
+        lcd.print("Erro SPIFFS     ");
+        delay(2000);
         return;
     }
     File configFile = SPIFFS.open("/config.txt", "w");
     if (configFile) {
-        configFile.println(apiKey);
-        configFile.println(emailDestino);
-        configFile.println(limiteTemp);
-        configFile.println(limiteUmid);
-        configFile.println(idDispositivo);
+        configFile.print(apiKey); configFile.print("\n");
+        configFile.print(emailDestino); configFile.print("\n");
+        configFile.print(limiteTemp); configFile.print("\n");
+        configFile.print(limiteUmid); configFile.print("\n");
+        configFile.print(idDispositivo); configFile.print("\n");
         configFile.close();
-        Serial.println("Configurações salvas no SPIFFS");
+        Serial.println("Configurações salvas no SPIFFS:");
+        Serial.println("API Key: [" + String(apiKey) + "]");
+        Serial.println("Email: [" + String(emailDestino) + "]");
+        Serial.println("Limite Temp: [" + String(limiteTemp) + "]");
+        Serial.println("Limite Umid: [" + String(limiteUmid) + "]");
+        Serial.println("ID Dispositivo: [" + String(idDispositivo) + "]");
     } else {
         Serial.println("Falha ao salvar configurações no SPIFFS");
+        lcd.setCursor(0, 0);
+        lcd.print("Erro Salvar     ");
+        delay(2000);
     }
     SPIFFS.end();
 }
@@ -130,11 +159,11 @@ void handleRoot() {
 
 // --- Salvar Configurações do Formulário ---
 void handleSave() {
-    if (server.hasArg("apiKey")) strncpy(apiKey, server.arg("apiKey").c_str(), sizeof(apiKey) - 1); apiKey[sizeof(apiKey) - 1] = '\0';
-    if (server.hasArg("email")) strncpy(emailDestino, server.arg("email").c_str(), sizeof(emailDestino) - 1); emailDestino[sizeof(emailDestino) - 1] = '\0';
-    if (server.hasArg("limiteTemp")) strncpy(limiteTemp, server.arg("limiteTemp").c_str(), sizeof(limiteTemp) - 1); limiteTemp[sizeof(limiteTemp) - 1] = '\0';
-    if (server.hasArg("limiteUmid")) strncpy(limiteUmid, server.arg("limiteUmid").c_str(), sizeof(limiteUmid) - 1); limiteUmid[sizeof(limiteUmid) - 1] = '\0';
-    if (server.hasArg("idDispositivo")) strncpy(idDispositivo, server.arg("idDispositivo").c_str(), sizeof(idDispositivo) - 1); idDispositivo[sizeof(idDispositivo) - 1] = '\0';
+    if (server.hasArg("apiKey")) strncpy(apiKey, server.arg("apiKey").c_str(), sizeof(apiKey) - 1); apiKey[sizeof(apiKey) - 1] = '\0'; limparString(apiKey, sizeof(apiKey));
+    if (server.hasArg("email")) strncpy(emailDestino, server.arg("email").c_str(), sizeof(emailDestino) - 1); emailDestino[sizeof(emailDestino) - 1] = '\0'; limparString(emailDestino, sizeof(emailDestino));
+    if (server.hasArg("limiteTemp")) strncpy(limiteTemp, server.arg("limiteTemp").c_str(), sizeof(limiteTemp) - 1); limiteTemp[sizeof(limiteTemp) - 1] = '\0'; limparString(limiteTemp, sizeof(limiteTemp));
+    if (server.hasArg("limiteUmid")) strncpy(limiteUmid, server.arg("limiteUmid").c_str(), sizeof(limiteUmid) - 1); limiteUmid[sizeof(limiteUmid) - 1] = '\0'; limparString(limiteUmid, sizeof(limiteUmid));
+    if (server.hasArg("idDispositivo")) strncpy(idDispositivo, server.arg("idDispositivo").c_str(), sizeof(idDispositivo) - 1); idDispositivo[sizeof(idDispositivo) - 1] = '\0'; limparString(idDispositivo, sizeof(idDispositivo));
 
     salvarConfiguracoes();
     Serial.println("Configurações salvas via web");
@@ -183,13 +212,27 @@ void enviarEmail(const char* assunto, const char* mensagem) {
 
 // --- Envio de Dados ao ThingSpeak ---
 void enviarParaThingSpeak(float temperatura, float umidade) {
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("WiFi não conectado, abortando envio ao ThingSpeak");
+        return;
+    }
+
+    WiFiClient client;
     if (client.connect("api.thingspeak.com", 80)) {
-        client.setTimeout(5000);
-        char url[128];
-        snprintf(url, sizeof(url), "/update?api_key=%s&field1=%.2f&field2=%.2f", apiKey, temperatura, umidade);
-        client.print("GET ");
-        client.print(url);
-        client.print(" HTTP/1.1\r\nHost: api.thingspeak.com\r\nConnection: close\r\n\r\n");
+        String url = "/update?api_key=" + String(apiKey) + "&field1=" + String(temperatura, 2) + "&field2=" + String(umidade, 2);
+        client.print(String("GET ") + url + " HTTP/1.1\r\n" +
+                     "Host: api.thingspeak.com\r\n" +
+                     "Connection: close\r\n\r\n");
+
+        unsigned long timeout = millis();
+        while (client.connected() && millis() - timeout < 5000) {
+            if (client.available()) {
+                String response = client.readStringUntil('\r');
+                Serial.println("Resposta do ThingSpeak: " + response);
+                break;
+            }
+            delay(10);
+        }
         client.stop();
         Serial.println("Dados enviados ao ThingSpeak: T=" + String(temperatura) + "C, U=" + String(umidade) + "%");
     } else {
@@ -228,15 +271,13 @@ void verificarAlertas(float temperatura, float umidade) {
     float tempLimite = atof(limiteTemp);
     float umidLimite = atof(limiteUmid);
 
-    // Calcula a diferença percentual em relação aos limites
     float diffTemp = abs(temperatura - tempLimite) / tempLimite * 100.0;
     float diffUmid = abs(umidade - umidLimite) / umidLimite * 100.0;
-    float maxDiff = max(diffTemp, diffUmid); // Usa a maior diferença para determinar o estado
+    float maxDiff = max(diffTemp, diffUmid);
 
-    // Define os estados com base nos percentuais
-    bool dentroNormal = (maxDiff <= 15.0); // 0% a 15%
-    bool alertaAmarelo = (maxDiff > 15.0 && maxDiff <= 20.0); // 16% a 20%
-    bool emergencia = (maxDiff > 20.0); // 21% ou mais
+    bool dentroNormal = (maxDiff <= 15.0);
+    bool alertaAmarelo = (maxDiff > 15.0 && maxDiff <= 20.0);
+    bool emergencia = (maxDiff > 20.0);
 
     if (dentroNormal) {
         digitalWrite(LED_VERDE, HIGH);
@@ -338,11 +379,10 @@ void manterPowerBank() {
     digitalWrite(LED_PIN, HIGH);
 }
 
-// --- Função para atualizar o LCD (alternar entre dados e IP) ---
+// --- Função para atualizar o LCD ---
 void atualizarLCD() {
     if (millis() - ultimaAtualizacaoLCD >= intervaloAtualizacaoLCD) {
         if (!mostrandoIP) {
-            // Inicia a exibição do IP
             String ip = WiFi.localIP().toString();
             lcd.clear();
             lcd.setCursor(0, 0);
@@ -353,11 +393,10 @@ void atualizarLCD() {
             ultimaAtualizacaoLCD = millis();
         }
     } else if (mostrandoIP && (millis() - ultimaAtualizacaoLCD >= duracaoIP)) {
-        // Volta aos dados do sensor após 5 segundos
         mostrandoIP = false;
         lcd.clear();
         ultimaAtualizacaoLCD = millis();
-        leituraSensor(); // Força uma atualização imediata dos dados
+        leituraSensor();
     }
 }
 
@@ -402,19 +441,43 @@ void setup() {
     Serial.println("Wi-Fi conectado!");
     Serial.print("IP: "); Serial.println(WiFi.localIP());
 
+    WiFi.reconnect();
+    unsigned long wifiTimeout = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - wifiTimeout < 10000) {
+        delay(500);
+        Serial.println("Aguardando reconexão Wi-Fi...");
+    }
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("Wi-Fi reconectado com sucesso!");
+    } else {
+        Serial.println("Falha na reconexão Wi-Fi, prosseguindo...");
+    }
+
     carregarConfiguracoes();
 
+    if (!SPIFFS.begin()) {
+        Serial.println("Falha ao iniciar SPIFFS na verificação");
+    }
     File configFile = SPIFFS.open("/config.txt", "r");
     if (!configFile) {
-        strncpy(apiKey, apiKeyParam.getValue(), sizeof(apiKey) - 1); apiKey[sizeof(apiKey) - 1] = '\0';
-        strncpy(emailDestino, emailParam.getValue(), sizeof(emailDestino) - 1); emailDestino[sizeof(emailDestino) - 1] = '\0';
-        strncpy(limiteTemp, tempParam.getValue(), sizeof(limiteTemp) - 1); limiteTemp[sizeof(limiteTemp) - 1] = '\0';
-        strncpy(limiteUmid, umidParam.getValue(), sizeof(limiteUmid) - 1); limiteUmid[sizeof(limiteUmid) - 1] = '\0';
-        strncpy(idDispositivo, idParam.getValue(), sizeof(idDispositivo) - 1); idDispositivo[sizeof(idDispositivo) - 1] = '\0';
+        strncpy(apiKey, apiKeyParam.getValue(), sizeof(apiKey) - 1); apiKey[sizeof(apiKey) - 1] = '\0'; limparString(apiKey, sizeof(apiKey));
+        strncpy(emailDestino, emailParam.getValue(), sizeof(emailDestino) - 1); emailDestino[sizeof(emailDestino) - 1] = '\0'; limparString(emailDestino, sizeof(emailDestino));
+        strncpy(limiteTemp, tempParam.getValue(), sizeof(limiteTemp) - 1); limiteTemp[sizeof(limiteTemp) - 1] = '\0'; limparString(limiteTemp, sizeof(limiteTemp));
+        strncpy(limiteUmid, umidParam.getValue(), sizeof(limiteUmid) - 1); limiteUmid[sizeof(limiteUmid) - 1] = '\0'; limparString(limiteUmid, sizeof(limiteUmid));
+        strncpy(idDispositivo, idParam.getValue(), sizeof(idDispositivo) - 1); idDispositivo[sizeof(idDispositivo) - 1] = '\0'; limparString(idDispositivo, sizeof(idDispositivo));
         salvarConfiguracoes();
-        Serial.println("Configurações iniciais salvas do WiFiManager");
+        Serial.println("Configurações iniciais do WiFiManager salvas no SPIFFS");
     } else {
         configFile.close();
+        Serial.println("Configurações já existem no SPIFFS e foram carregadas");
+    }
+    SPIFFS.end();
+
+    if (strlen(apiKey) == 0 || strcmp(apiKey, "A7ZK7OU2HLTFCS3N") == 0) {
+        Serial.println("Aviso: API Key padrão ou vazia detectada. ThingSpeak pode não funcionar.");
+        lcd.setCursor(0, 0);
+        lcd.print("Erro API Key    ");
+        delay(2000);
     }
 
     setupNTP();
@@ -425,11 +488,28 @@ void setup() {
     MailClient.networkReconnect(true);
     smtp.callback([](SMTP_Status status) {});
 
+    float temp = dht.getTemperature();
+    float umid = dht.getHumidity();
+    if (!isnan(temp) && !isnan(umid)) {
+        enviarParaThingSpeak(temp, umid);
+    }
+
     enviarEmailConfirmacao();
 }
 
 // --- Loop Principal ---
 void loop() {
+    if (millis() - ultimoEnvioThingSpeak >= intervaloThingSpeak) {
+        float temp = dht.getTemperature();
+        float umid = dht.getHumidity();
+        if (!isnan(temp) && !isnan(umid)) {
+            enviarParaThingSpeak(temp, umid);
+            ultimoEnvioThingSpeak = millis();
+        } else {
+            Serial.println("Erro na leitura para ThingSpeak");
+        }
+    }
+
     server.handleClient();
     ESP.wdtFeed();
 
@@ -453,17 +533,6 @@ void loop() {
         }
         delay(50);
         return;
-    }
-
-    if (millis() - ultimoEnvioThingSpeak >= intervaloThingSpeak) {
-        float temp = dht.getTemperature();
-        float umid = dht.getHumidity();
-        if (!isnan(temp) && !isnan(umid)) {
-            enviarParaThingSpeak(temp, umid);
-            ultimoEnvioThingSpeak = millis();
-        } else {
-            Serial.println("Erro na leitura para ThingSpeak");
-        }
     }
 
     if (millis() - ultimoEnvioEmail >= intervaloEnvioEmail) {
