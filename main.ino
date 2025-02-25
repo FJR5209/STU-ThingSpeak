@@ -1,12 +1,15 @@
+#include <ESP8266HTTPClient.h>
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
+#include <WiFiClientSecure.h>
 #include <ESP8266WebServer.h>
 #include <WiFiManager.h>
 #include <DHTesp.h>
 #include <ESP_Mail_Client.h>
 #include <time.h>
 #include <Wire.h>
-#include <LiquidCrystal_I2C.h>  //OFICIAL
+#include <LiquidCrystal_I2C.h>
+#include <UrlEncode.h>
 
 // --- Definições de Pinos ---
 #define SDA_PIN 5      // D1 - SDA para LCD
@@ -24,11 +27,17 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 ESP8266WebServer server(80);
 
 // --- Configurações de Rede e Email ---
-char apiKey[20] = "A7ZK7OU2HLTFCS3N";
+char apiKey[20] = "WOZ7Z41VYW66EAEU"; // API Key do ThingSpeak
 char emailDestino[50] = "juniorfredson5209@gmail.com";
-char limiteTemp[5] = "22";
-char limiteUmid[5] = "49";
+char tempMin[5] = "2";   // Temperatura mínima (2°C)
+char tempMax[5] = "8";   // Temperatura máxima (8°C)
+char umidMin[5] = "30";  // Umidade mínima (30%)
+char umidMax[5] = "60";  // Umidade máxima (60%)
 char idDispositivo[30] = "ESP8266_TCC_Empresa1";
+
+// --- Configurações do WhatsApp (CallMeBot) ---
+String phoneNumber = "556899993206";
+String whatsAppApiKey = "6279478";
 
 #define SMTP_HOST "smtp.gmail.com"
 #define SMTP_PORT esp_mail_smtp_port_465
@@ -48,7 +57,7 @@ unsigned long ultimaAtualizacaoLCD = 0;
 bool mostrandoIP = false;
 const unsigned long intervaloEnvioEmail = 3600000; // 1 hora
 const unsigned long intervaloMinimoEmergencia = 300000; // 5 minutos
-const unsigned long intervaloAtualizacaoLCD = 10000; // 10 segundos (ciclo completo)
+const unsigned long intervaloAtualizacaoLCD = 10000; // 10 segundos
 const unsigned long duracaoIP = 5000; // 5 segundos para exibir o IP
 bool emailConfirmacaoEnviado = false;
 bool emergenciaAtiva = false;
@@ -79,6 +88,32 @@ void limparString(char* str, size_t tamanho) {
     }
 }
 
+// --- Função para Enviar Mensagem pelo WhatsApp ---
+void sendWhatsAppMessage(String message) {
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("WiFi não conectado, abortando envio ao WhatsApp");
+        return;
+    }
+
+    String url = "https://api.callmebot.com/whatsapp.php?phone=" + phoneNumber + "&apikey=" + whatsAppApiKey + "&text=" + urlEncode(message);
+    WiFiClientSecure client;
+    client.setInsecure();
+    HTTPClient http;
+
+    http.setTimeout(15000);
+    if (http.begin(client, url)) {
+        int httpResponseCode = http.GET();
+        if (httpResponseCode > 0) {
+            Serial.println("Código HTTP WhatsApp: " + String(httpResponseCode));
+        } else {
+            Serial.println("Erro HTTP: " + String(httpResponseCode));
+        }
+        http.end();
+    } else {
+        Serial.println("Falha ao iniciar conexão com o CallMeBot");
+    }
+}
+
 // --- Função para Carregar Configurações do SPIFFS ---
 void carregarConfiguracoes() {
     if (!SPIFFS.begin()) {
@@ -93,15 +128,19 @@ void carregarConfiguracoes() {
         String line;
         line = configFile.readStringUntil('\n'); strncpy(apiKey, line.c_str(), sizeof(apiKey) - 1); apiKey[sizeof(apiKey) - 1] = '\0'; limparString(apiKey, sizeof(apiKey));
         line = configFile.readStringUntil('\n'); strncpy(emailDestino, line.c_str(), sizeof(emailDestino) - 1); emailDestino[sizeof(emailDestino) - 1] = '\0'; limparString(emailDestino, sizeof(emailDestino));
-        line = configFile.readStringUntil('\n'); strncpy(limiteTemp, line.c_str(), sizeof(limiteTemp) - 1); limiteTemp[sizeof(limiteTemp) - 1] = '\0'; limparString(limiteTemp, sizeof(limiteTemp));
-        line = configFile.readStringUntil('\n'); strncpy(limiteUmid, line.c_str(), sizeof(limiteUmid) - 1); limiteUmid[sizeof(limiteUmid) - 1] = '\0'; limparString(limiteUmid, sizeof(limiteUmid));
+        line = configFile.readStringUntil('\n'); strncpy(tempMin, line.c_str(), sizeof(tempMin) - 1); tempMin[sizeof(tempMin) - 1] = '\0'; limparString(tempMin, sizeof(tempMin));
+        line = configFile.readStringUntil('\n'); strncpy(tempMax, line.c_str(), sizeof(tempMax) - 1); tempMax[sizeof(tempMax) - 1] = '\0'; limparString(tempMax, sizeof(tempMax));
+        line = configFile.readStringUntil('\n'); strncpy(umidMin, line.c_str(), sizeof(umidMin) - 1); umidMin[sizeof(umidMin) - 1] = '\0'; limparString(umidMin, sizeof(umidMin));
+        line = configFile.readStringUntil('\n'); strncpy(umidMax, line.c_str(), sizeof(umidMax) - 1); umidMax[sizeof(umidMax) - 1] = '\0'; limparString(umidMax, sizeof(umidMax));
         line = configFile.readStringUntil('\n'); strncpy(idDispositivo, line.c_str(), sizeof(idDispositivo) - 1); idDispositivo[sizeof(idDispositivo) - 1] = '\0'; limparString(idDispositivo, sizeof(idDispositivo));
         configFile.close();
         Serial.println("Configurações carregadas do SPIFFS:");
         Serial.println("API Key: [" + String(apiKey) + "]");
         Serial.println("Email: [" + String(emailDestino) + "]");
-        Serial.println("Limite Temp: [" + String(limiteTemp) + "]");
-        Serial.println("Limite Umid: [" + String(limiteUmid) + "]");
+        Serial.println("Temp Min: [" + String(tempMin) + "]");
+        Serial.println("Temp Max: [" + String(tempMax) + "]");
+        Serial.println("Umid Min: [" + String(umidMin) + "]");
+        Serial.println("Umid Max: [" + String(umidMax) + "]");
         Serial.println("ID Dispositivo: [" + String(idDispositivo) + "]");
     } else {
         Serial.println("Nenhum arquivo de configuração encontrado, mantendo valores padrão ou do WiFiManager");
@@ -122,38 +161,43 @@ void salvarConfiguracoes() {
     if (configFile) {
         configFile.print(apiKey); configFile.print("\n");
         configFile.print(emailDestino); configFile.print("\n");
-        configFile.print(limiteTemp); configFile.print("\n");
-        configFile.print(limiteUmid); configFile.print("\n");
+        configFile.print(tempMin); configFile.print("\n");
+        configFile.print(tempMax); configFile.print("\n");
+        configFile.print(umidMin); configFile.print("\n");
+        configFile.print(umidMax); configFile.print("\n");
         configFile.print(idDispositivo); configFile.print("\n");
         configFile.close();
         Serial.println("Configurações salvas no SPIFFS:");
         Serial.println("API Key: [" + String(apiKey) + "]");
         Serial.println("Email: [" + String(emailDestino) + "]");
-        Serial.println("Limite Temp: [" + String(limiteTemp) + "]");
-        Serial.println("Limite Umid: [" + String(limiteUmid) + "]");
+        Serial.println("Temp Min: [" + String(tempMin) + "]");
+        Serial.println("Temp Max: [" + String(tempMax) + "]");
+        Serial.println("Umid Min: [" + String(umidMin) + "]");
+        Serial.println("Umid Max: [" + String(umidMax) + "]");
         Serial.println("ID Dispositivo: [" + String(idDispositivo) + "]");
     } else {
         Serial.println("Falha ao salvar configurações no SPIFFS");
-        lcd.setCursor(0, 0);
-        lcd.print("Erro Salvar     ");
-        delay(2000);
     }
     SPIFFS.end();
 }
 
+// --- Variável global para o buffer HTML ---
+char html[1024]; // Aumentado para 1024 caracteres
+
 // --- Página Web para Configuração ---
 void handleRoot() {
-    char html[512];
     snprintf(html, sizeof(html),
              "<html><body><h1>Configuracao ESP8266</h1>"
              "<form method='POST' action='/save'>"
              "API Key: <input type='text' name='apiKey' value='%s'><br>"
              "Email: <input type='text' name='email' value='%s'><br>"
-             "Limite Temp: <input type='text' name='limiteTemp' value='%s'><br>"
-             "Limite Umid: <input type='text' name='limiteUmid' value='%s'><br>"
+             "Temp Min: <input type='text' name='tempMin' value='%s'><br>"
+             "Temp Max: <input type='text' name='tempMax' value='%s'><br>"
+             "Umid Min: <input type='text' name='umidMin' value='%s'><br>"
+             "Umid Max: <input type='text' name='umidMax' value='%s'><br>"
              "ID Dispositivo: <input type='text' name='idDispositivo' value='%s'><br>"
              "<input type='submit' value='Salvar'></form></body></html>",
-             apiKey, emailDestino, limiteTemp, limiteUmid, idDispositivo);
+             apiKey, emailDestino, tempMin, tempMax, umidMin, umidMax, idDispositivo);
     server.send(200, "text/html", html);
 }
 
@@ -161,12 +205,13 @@ void handleRoot() {
 void handleSave() {
     if (server.hasArg("apiKey")) strncpy(apiKey, server.arg("apiKey").c_str(), sizeof(apiKey) - 1); apiKey[sizeof(apiKey) - 1] = '\0'; limparString(apiKey, sizeof(apiKey));
     if (server.hasArg("email")) strncpy(emailDestino, server.arg("email").c_str(), sizeof(emailDestino) - 1); emailDestino[sizeof(emailDestino) - 1] = '\0'; limparString(emailDestino, sizeof(emailDestino));
-    if (server.hasArg("limiteTemp")) strncpy(limiteTemp, server.arg("limiteTemp").c_str(), sizeof(limiteTemp) - 1); limiteTemp[sizeof(limiteTemp) - 1] = '\0'; limparString(limiteTemp, sizeof(limiteTemp));
-    if (server.hasArg("limiteUmid")) strncpy(limiteUmid, server.arg("limiteUmid").c_str(), sizeof(limiteUmid) - 1); limiteUmid[sizeof(limiteUmid) - 1] = '\0'; limparString(limiteUmid, sizeof(limiteUmid));
+    if (server.hasArg("tempMin")) strncpy(tempMin, server.arg("tempMin").c_str(), sizeof(tempMin) - 1); tempMin[sizeof(tempMin) - 1] = '\0'; limparString(tempMin, sizeof(tempMin));
+    if (server.hasArg("tempMax")) strncpy(tempMax, server.arg("tempMax").c_str(), sizeof(tempMax) - 1); tempMax[sizeof(tempMax) - 1] = '\0'; limparString(tempMax, sizeof(tempMax));
+    if (server.hasArg("umidMin")) strncpy(umidMin, server.arg("umidMin").c_str(), sizeof(umidMin) - 1); umidMin[sizeof(umidMin) - 1] = '\0'; limparString(umidMin, sizeof(umidMin));
+    if (server.hasArg("umidMax")) strncpy(umidMax, server.arg("umidMax").c_str(), sizeof(umidMax) - 1); umidMax[sizeof(umidMax) - 1] = '\0'; limparString(umidMax, sizeof(umidMax));
     if (server.hasArg("idDispositivo")) strncpy(idDispositivo, server.arg("idDispositivo").c_str(), sizeof(idDispositivo) - 1); idDispositivo[sizeof(idDispositivo) - 1] = '\0'; limparString(idDispositivo, sizeof(idDispositivo));
 
     salvarConfiguracoes();
-    Serial.println("Configurações salvas via web");
     server.send(200, "text/html", "<html><body><h1>Configuracoes salvas!</h1><a href='/'>Voltar</a></body></html>");
 }
 
@@ -228,13 +273,14 @@ void enviarParaThingSpeak(float temperatura, float umidade) {
         while (client.connected() && millis() - timeout < 5000) {
             if (client.available()) {
                 String response = client.readStringUntil('\r');
-                Serial.println("Resposta do ThingSpeak: " + response);
+                if (response.startsWith("HTTP/1.1 200 OK")) {
+                    Serial.println("Dados enviados ao ThingSpeak");
+                }
                 break;
             }
             delay(10);
         }
         client.stop();
-        Serial.println("Dados enviados ao ThingSpeak: T=" + String(temperatura) + "C, U=" + String(umidade) + "%");
     } else {
         Serial.println("Falha ao conectar ao ThingSpeak");
     }
@@ -256,27 +302,47 @@ void enviarRelatorio() {
     ultimoEnvioEmail = millis();
 }
 
-// --- Email de Confirmação ---
+// --- Confirmação de Conexão ---
 void enviarEmailConfirmacao() {
     if (!emailConfirmacaoEnviado) {
         char mensagem[128];
         snprintf(mensagem, sizeof(mensagem), "Parabéns, você está conectado ao %s, e ele está operando corretamente.", idDispositivo);
         enviarEmail("Confirmação de conexão", mensagem);
+        sendWhatsAppMessage(mensagem);
         emailConfirmacaoEnviado = true;
     }
 }
 
-// --- Verificação de Alertas com LEDs, Buzzer e Mensagens no LCD ---
+// --- Verificação de Alertas com LEDs, Buzzer e Mensagens ---
 void verificarAlertas(float temperatura, float umidade) {
-    float tempLimite = atof(limiteTemp);
-    float umidLimite = atof(limiteUmid);
+    float tempMinFloat = atof(tempMin);  // 2°C
+    float tempMaxFloat = atof(tempMax);  // 8°C
+    float umidMinFloat = atof(umidMin);  // 30%
+    float umidMaxFloat = atof(umidMax);  // 60%
 
-    float diffTemp = abs(temperatura - tempLimite) / tempLimite * 100.0;
-    float diffUmid = abs(umidade - umidLimite) / umidLimite * 100.0;
-    float maxDiff = max(diffTemp, diffUmid);
+    // Calcula variações percentuais para temperatura
+    float diffTempMin = 0, diffTempMax = 0;
+    if (temperatura < tempMinFloat) {
+        diffTempMin = (tempMinFloat - temperatura) / tempMinFloat * 100.0;
+    } else if (temperatura > tempMaxFloat) {
+        diffTempMax = (temperatura - tempMaxFloat) / tempMaxFloat * 100.0;
+    }
 
-    bool dentroNormal = (maxDiff <= 15.0);
-    bool alertaAmarelo = (maxDiff > 15.0 && maxDiff <= 20.0);
+    // Calcula variações percentuais para umidade
+    float diffUmidMin = 0, diffUmidMax = 0;
+    if (umidade < umidMinFloat) {
+        diffUmidMin = (umidMinFloat - umidade) / umidMinFloat * 100.0;
+    } else if (umidade > umidMaxFloat) {
+        diffUmidMax = (umidade - umidMaxFloat) / umidMaxFloat * 100.0;
+    }
+
+    float maxDiffTemp = max(diffTempMin, diffTempMax);
+    float maxDiffUmid = max(diffUmidMin, diffUmidMax);
+    float maxDiff = max(maxDiffTemp, maxDiffUmid);
+
+    bool dentroNormal = (temperatura >= tempMinFloat && temperatura <= tempMaxFloat) && 
+                        (umidade >= umidMinFloat && umidade <= umidMaxFloat);
+    bool alertaAmarelo = (maxDiff > 0 && maxDiff <= 15.0);
     bool emergencia = (maxDiff > 20.0);
 
     if (dentroNormal) {
@@ -285,7 +351,7 @@ void verificarAlertas(float temperatura, float umidade) {
         digitalWrite(LED_VERMELHO, LOW);
         if (!mostrandoIP) {
             lcd.setCursor(0, 0);
-            lcd.print("LAB VACINAS         ");
+            lcd.print("LAB VACINAS     ");
         }
         noTone(BUZZER_PIN);
         buzzerAtivo = false;
@@ -299,7 +365,6 @@ void verificarAlertas(float temperatura, float umidade) {
             lcd.print("Alerta: Verifique");
         }
         if (!buzzerAtivo) {
-            Serial.println("Estado Amarelo - Buzzer ligado");
             tone(BUZZER_PIN, 1500);
             buzzerInicio = millis();
             buzzerAtivo = true;
@@ -314,16 +379,35 @@ void verificarAlertas(float temperatura, float umidade) {
             lcd.print("Emergencia!!!   ");
         }
         if (!buzzerAtivo) {
-            Serial.println("Estado Vermelho - Buzzer ligado");
             tone(BUZZER_PIN, 3000);
             buzzerInicio = millis();
             buzzerAtivo = true;
         }
         if (!emergenciaAtiva || (millis() - ultimoEnvioEmergencia >= intervaloMinimoEmergencia)) {
-            char mensagem[128];
-            snprintf(mensagem, sizeof(mensagem), "Emergência detectada!\nTemp: %.2f°C (Limite: %.2f)\nUmid: %.2f%% (Limite: %.2f)", 
-                     temperatura, tempLimite, umidade, umidLimite);
+            char mensagem[256];
+            if (maxDiffTemp > maxDiffUmid) {
+                if (temperatura < tempMinFloat) {
+                    snprintf(mensagem, sizeof(mensagem), 
+                             "Emergência detectada!\nTemp: %.2f°C (Mínimo: %.2f)\nUmid: %.2f%%", 
+                             temperatura, tempMinFloat, umidade);
+                } else {
+                    snprintf(mensagem, sizeof(mensagem), 
+                             "Emergência detectada!\nTemp: %.2f°C (Máximo: %.2f)\nUmid: %.2f%%", 
+                             temperatura, tempMaxFloat, umidade);
+                }
+            } else {
+                if (umidade < umidMinFloat) {
+                    snprintf(mensagem, sizeof(mensagem), 
+                             "Emergência detectada!\nTemp: %.2f°C\nUmid: %.2f%% (Mínimo: %.2f)", 
+                             temperatura, umidade, umidMinFloat);
+                } else {
+                    snprintf(mensagem, sizeof(mensagem), 
+                             "Emergência detectada!\nTemp: %.2f°C\nUmid: %.2f%% (Máximo: %.2f)", 
+                             temperatura, umidade, umidMaxFloat);
+                }
+            }
             enviarEmail("Alerta de Emergência", mensagem);
+            sendWhatsAppMessage(mensagem);
             emergenciaAtiva = true;
             ultimoEnvioEmergencia = millis();
         }
@@ -332,7 +416,6 @@ void verificarAlertas(float temperatura, float umidade) {
     if (buzzerAtivo && (millis() - buzzerInicio >= buzzerDuracao)) {
         noTone(BUZZER_PIN);
         buzzerAtivo = false;
-        Serial.println("Buzzer desligado");
     }
 }
 
@@ -345,17 +428,10 @@ void leituraSensor() {
         Serial.println("Leitura inválida do sensor DHT11");
         lcd.setCursor(0, 1);
         lcd.print("Erro Sensor     ");
-        lcd.setCursor(0, 0);
-        lcd.print("                ");
-        if (buzzerAtivo) {
-            noTone(BUZZER_PIN);
-            buzzerAtivo = false;
-            Serial.println("Buzzer desligado devido a erro");
-        }
         return;
     }
 
-    Serial.print("Leitura: Temp="); Serial.print(temperatura); Serial.print("°C, Umid="); Serial.print(umidade); Serial.println("%");
+    Serial.print("Temp="); Serial.print(temperatura); Serial.print("°C, Umid="); Serial.print(umidade); Serial.println("%");
     if (!mostrandoIP) {
         lcd.setCursor(0, 1);
         lcd.print("T:");
@@ -423,14 +499,18 @@ void setup() {
     WiFiManager wm;
     WiFiManagerParameter apiKeyParam("apiKey", "Chave da API", apiKey, 20);
     WiFiManagerParameter emailParam("email", "E-mail", emailDestino, 50);
-    WiFiManagerParameter tempParam("tempLimite", "Limite Temp", limiteTemp, 5);
-    WiFiManagerParameter umidParam("umidLimite", "Limite Umid", limiteUmid, 5);
+    WiFiManagerParameter tempMinParam("tempMin", "Temp Min", tempMin, 5);
+    WiFiManagerParameter tempMaxParam("tempMax", "Temp Max", tempMax, 5);
+    WiFiManagerParameter umidMinParam("umidMin", "Umid Min", umidMin, 5);
+    WiFiManagerParameter umidMaxParam("umidMax", "Umid Max", umidMax, 5);
     WiFiManagerParameter idParam("idDevice", "ID Dispositivo", idDispositivo, 30);
 
     wm.addParameter(&apiKeyParam);
     wm.addParameter(&emailParam);
-    wm.addParameter(&tempParam);
-    wm.addParameter(&umidParam);
+    wm.addParameter(&tempMinParam);
+    wm.addParameter(&tempMaxParam);
+    wm.addParameter(&umidMinParam);
+    wm.addParameter(&umidMaxParam);
     wm.addParameter(&idParam);
 
     if (!wm.autoConnect("ThingSpeak", "esp82663")) {
@@ -441,18 +521,6 @@ void setup() {
     Serial.println("Wi-Fi conectado!");
     Serial.print("IP: "); Serial.println(WiFi.localIP());
 
-    WiFi.reconnect();
-    unsigned long wifiTimeout = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - wifiTimeout < 10000) {
-        delay(500);
-        Serial.println("Aguardando reconexão Wi-Fi...");
-    }
-    if (WiFi.status() == WL_CONNECTED) {
-        Serial.println("Wi-Fi reconectado com sucesso!");
-    } else {
-        Serial.println("Falha na reconexão Wi-Fi, prosseguindo...");
-    }
-
     carregarConfiguracoes();
 
     if (!SPIFFS.begin()) {
@@ -462,31 +530,20 @@ void setup() {
     if (!configFile) {
         strncpy(apiKey, apiKeyParam.getValue(), sizeof(apiKey) - 1); apiKey[sizeof(apiKey) - 1] = '\0'; limparString(apiKey, sizeof(apiKey));
         strncpy(emailDestino, emailParam.getValue(), sizeof(emailDestino) - 1); emailDestino[sizeof(emailDestino) - 1] = '\0'; limparString(emailDestino, sizeof(emailDestino));
-        strncpy(limiteTemp, tempParam.getValue(), sizeof(limiteTemp) - 1); limiteTemp[sizeof(limiteTemp) - 1] = '\0'; limparString(limiteTemp, sizeof(limiteTemp));
-        strncpy(limiteUmid, umidParam.getValue(), sizeof(limiteUmid) - 1); limiteUmid[sizeof(limiteUmid) - 1] = '\0'; limparString(limiteUmid, sizeof(limiteUmid));
+        strncpy(tempMin, tempMinParam.getValue(), sizeof(tempMin) - 1); tempMin[sizeof(tempMin) - 1] = '\0'; limparString(tempMin, sizeof(tempMin));
+        strncpy(tempMax, tempMaxParam.getValue(), sizeof(tempMax) - 1); tempMax[sizeof(tempMax) - 1] = '\0'; limparString(tempMax, sizeof(tempMax));
+        strncpy(umidMin, umidMinParam.getValue(), sizeof(umidMin) - 1); umidMin[sizeof(umidMin) - 1] = '\0'; limparString(umidMin, sizeof(umidMin));
+        strncpy(umidMax, umidMaxParam.getValue(), sizeof(umidMax) - 1); umidMax[sizeof(umidMax) - 1] = '\0'; limparString(umidMax, sizeof(umidMax));
         strncpy(idDispositivo, idParam.getValue(), sizeof(idDispositivo) - 1); idDispositivo[sizeof(idDispositivo) - 1] = '\0'; limparString(idDispositivo, sizeof(idDispositivo));
         salvarConfiguracoes();
-        Serial.println("Configurações iniciais do WiFiManager salvas no SPIFFS");
-    } else {
-        configFile.close();
-        Serial.println("Configurações já existem no SPIFFS e foram carregadas");
     }
     SPIFFS.end();
-
-    if (strlen(apiKey) == 0 || strcmp(apiKey, "A7ZK7OU2HLTFCS3N") == 0) {
-        Serial.println("Aviso: API Key padrão ou vazia detectada. ThingSpeak pode não funcionar.");
-        lcd.setCursor(0, 0);
-        lcd.print("Erro API Key    ");
-        delay(2000);
-    }
 
     setupNTP();
     server.on("/", handleRoot);
     server.on("/save", handleSave);
     server.begin();
-    Serial.println("Servidor web iniciado");
     MailClient.networkReconnect(true);
-    smtp.callback([](SMTP_Status status) {});
 
     float temp = dht.getTemperature();
     float umid = dht.getHumidity();
@@ -505,8 +562,6 @@ void loop() {
         if (!isnan(temp) && !isnan(umid)) {
             enviarParaThingSpeak(temp, umid);
             ultimoEnvioThingSpeak = millis();
-        } else {
-            Serial.println("Erro na leitura para ThingSpeak");
         }
     }
 
@@ -527,7 +582,6 @@ void loop() {
 
     if (WiFi.status() != WL_CONNECTED) {
         if (millis() - ultimoTentativaReconexao >= intervaloReconexao) {
-            Serial.println("WiFi desconectado, reconectando...");
             WiFi.reconnect();
             ultimoTentativaReconexao = millis();
         }
