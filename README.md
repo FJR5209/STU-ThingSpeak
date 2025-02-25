@@ -1,7 +1,6 @@
 Documentação do Código: Monitoramento de Temperatura e Umidade com ESP8266
 
-Data: 25 de fevereiro de 2025 (atualizado para refletir o código mais recente)
-
+Data: 25 de fevereiro de 2025 
 Versão: 1.2
 
 Autor: Fredson Junior
