@@ -34,11 +34,13 @@ char tempMax[5] = "8";   // Temperatura máxima (8°C)
 char umidMin[5] = "30";  // Umidade mínima (30%)
 char umidMax[5] = "60";  // Umidade máxima (60%)
 char idDispositivo[30] = "ESP8266_TCC_Empresa1";
+char phoneNumber[15] = "556899993206"; // Número do WhatsApp (máx. 14 dígitos + '\0')
+char whatsAppApiKey[10] = "6279478";   // Chave API do CallMeBot (máx. 9 caracteres + '\0')
 
 // --- Configurações do WhatsApp (CallMeBot) ---
-String phoneNumber = "556899993206";
-String whatsAppApiKey = "6279478";
+// (Agora usamos as variáveis char acima em vez de String)
 
+// --- Constantes de E-mail ---
 #define SMTP_HOST "smtp.gmail.com"
 #define SMTP_PORT esp_mail_smtp_port_465
 #define AUTHOR_EMAIL "suportetcc5209@gmail.com"
@@ -95,7 +97,10 @@ void sendWhatsAppMessage(String message) {
         return;
     }
 
-    String url = "https://api.callmebot.com/whatsapp.php?phone=" + phoneNumber + "&apikey=" + whatsAppApiKey + "&text=" + urlEncode(message);
+    // Converte char para String para uso na URL
+    String phone = String(phoneNumber);
+    String apiKey = String(whatsAppApiKey);
+    String url = "https://api.callmebot.com/whatsapp.php?phone=" + phone + "&apikey=" + apiKey + "&text=" + urlEncode(message);
     WiFiClientSecure client;
     client.setInsecure();
     HTTPClient http;
@@ -133,6 +138,8 @@ void carregarConfiguracoes() {
         line = configFile.readStringUntil('\n'); strncpy(umidMin, line.c_str(), sizeof(umidMin) - 1); umidMin[sizeof(umidMin) - 1] = '\0'; limparString(umidMin, sizeof(umidMin));
         line = configFile.readStringUntil('\n'); strncpy(umidMax, line.c_str(), sizeof(umidMax) - 1); umidMax[sizeof(umidMax) - 1] = '\0'; limparString(umidMax, sizeof(umidMax));
         line = configFile.readStringUntil('\n'); strncpy(idDispositivo, line.c_str(), sizeof(idDispositivo) - 1); idDispositivo[sizeof(idDispositivo) - 1] = '\0'; limparString(idDispositivo, sizeof(idDispositivo));
+        line = configFile.readStringUntil('\n'); strncpy(phoneNumber, line.c_str(), sizeof(phoneNumber) - 1); phoneNumber[sizeof(phoneNumber) - 1] = '\0'; limparString(phoneNumber, sizeof(phoneNumber));
+        line = configFile.readStringUntil('\n'); strncpy(whatsAppApiKey, line.c_str(), sizeof(whatsAppApiKey) - 1); whatsAppApiKey[sizeof(whatsAppApiKey) - 1] = '\0'; limparString(whatsAppApiKey, sizeof(whatsAppApiKey));
         configFile.close();
         Serial.println("Configurações carregadas do SPIFFS:");
         Serial.println("API Key: [" + String(apiKey) + "]");
@@ -142,6 +149,8 @@ void carregarConfiguracoes() {
         Serial.println("Umid Min: [" + String(umidMin) + "]");
         Serial.println("Umid Max: [" + String(umidMax) + "]");
         Serial.println("ID Dispositivo: [" + String(idDispositivo) + "]");
+        Serial.println("Phone Number: [" + String(phoneNumber) + "]");
+        Serial.println("WhatsApp API Key: [" + String(whatsAppApiKey) + "]");
     } else {
         Serial.println("Nenhum arquivo de configuração encontrado, mantendo valores padrão ou do WiFiManager");
     }
@@ -166,6 +175,8 @@ void salvarConfiguracoes() {
         configFile.print(umidMin); configFile.print("\n");
         configFile.print(umidMax); configFile.print("\n");
         configFile.print(idDispositivo); configFile.print("\n");
+        configFile.print(phoneNumber); configFile.print("\n");
+        configFile.print(whatsAppApiKey); configFile.print("\n");
         configFile.close();
         Serial.println("Configurações salvas no SPIFFS:");
         Serial.println("API Key: [" + String(apiKey) + "]");
@@ -175,6 +186,8 @@ void salvarConfiguracoes() {
         Serial.println("Umid Min: [" + String(umidMin) + "]");
         Serial.println("Umid Max: [" + String(umidMax) + "]");
         Serial.println("ID Dispositivo: [" + String(idDispositivo) + "]");
+        Serial.println("Phone Number: [" + String(phoneNumber) + "]");
+        Serial.println("WhatsApp API Key: [" + String(whatsAppApiKey) + "]");
     } else {
         Serial.println("Falha ao salvar configurações no SPIFFS");
     }
@@ -182,7 +195,7 @@ void salvarConfiguracoes() {
 }
 
 // --- Variável global para o buffer HTML ---
-char html[1024]; // Aumentado para 1024 caracteres
+char html[2048]; // Aumentado para 2048 caracteres para acomodar mais campos
 
 // --- Página Web para Configuração ---
 void handleRoot() {
@@ -196,8 +209,10 @@ void handleRoot() {
              "Umid Min: <input type='text' name='umidMin' value='%s'><br>"
              "Umid Max: <input type='text' name='umidMax' value='%s'><br>"
              "ID Dispositivo: <input type='text' name='idDispositivo' value='%s'><br>"
+             "Phone Number: <input type='text' name='phoneNumber' value='%s'><br>"
+             "WhatsApp API Key: <input type='text' name='whatsAppApiKey' value='%s'><br>"
              "<input type='submit' value='Salvar'></form></body></html>",
-             apiKey, emailDestino, tempMin, tempMax, umidMin, umidMax, idDispositivo);
+             apiKey, emailDestino, tempMin, tempMax, umidMin, umidMax, idDispositivo, phoneNumber, whatsAppApiKey);
     server.send(200, "text/html", html);
 }
 
@@ -210,6 +225,8 @@ void handleSave() {
     if (server.hasArg("umidMin")) strncpy(umidMin, server.arg("umidMin").c_str(), sizeof(umidMin) - 1); umidMin[sizeof(umidMin) - 1] = '\0'; limparString(umidMin, sizeof(umidMin));
     if (server.hasArg("umidMax")) strncpy(umidMax, server.arg("umidMax").c_str(), sizeof(umidMax) - 1); umidMax[sizeof(umidMax) - 1] = '\0'; limparString(umidMax, sizeof(umidMax));
     if (server.hasArg("idDispositivo")) strncpy(idDispositivo, server.arg("idDispositivo").c_str(), sizeof(idDispositivo) - 1); idDispositivo[sizeof(idDispositivo) - 1] = '\0'; limparString(idDispositivo, sizeof(idDispositivo));
+    if (server.hasArg("phoneNumber")) strncpy(phoneNumber, server.arg("phoneNumber").c_str(), sizeof(phoneNumber) - 1); phoneNumber[sizeof(phoneNumber) - 1] = '\0'; limparString(phoneNumber, sizeof(phoneNumber));
+    if (server.hasArg("whatsAppApiKey")) strncpy(whatsAppApiKey, server.arg("whatsAppApiKey").c_str(), sizeof(whatsAppApiKey) - 1); whatsAppApiKey[sizeof(whatsAppApiKey) - 1] = '\0'; limparString(whatsAppApiKey, sizeof(whatsAppApiKey));
 
     salvarConfiguracoes();
     server.send(200, "text/html", "<html><body><h1>Configuracoes salvas!</h1><a href='/'>Voltar</a></body></html>");
@@ -504,6 +521,8 @@ void setup() {
     WiFiManagerParameter umidMinParam("umidMin", "Umid Min", umidMin, 5);
     WiFiManagerParameter umidMaxParam("umidMax", "Umid Max", umidMax, 5);
     WiFiManagerParameter idParam("idDevice", "ID Dispositivo", idDispositivo, 30);
+    WiFiManagerParameter phoneParam("phoneNumber", "Phone Number", phoneNumber, 15);
+    WiFiManagerParameter apiWhatsAppParam("whatsAppApiKey", "WhatsApp API Key", whatsAppApiKey, 10);
 
     wm.addParameter(&apiKeyParam);
     wm.addParameter(&emailParam);
@@ -512,6 +531,8 @@ void setup() {
     wm.addParameter(&umidMinParam);
     wm.addParameter(&umidMaxParam);
     wm.addParameter(&idParam);
+    wm.addParameter(&phoneParam);
+    wm.addParameter(&apiWhatsAppParam);
 
     if (!wm.autoConnect("ThingSpeak", "esp82663")) {
         Serial.println("Falha na conexão Wi-Fi! Reiniciando...");
@@ -535,6 +556,8 @@ void setup() {
         strncpy(umidMin, umidMinParam.getValue(), sizeof(umidMin) - 1); umidMin[sizeof(umidMin) - 1] = '\0'; limparString(umidMin, sizeof(umidMin));
         strncpy(umidMax, umidMaxParam.getValue(), sizeof(umidMax) - 1); umidMax[sizeof(umidMax) - 1] = '\0'; limparString(umidMax, sizeof(umidMax));
         strncpy(idDispositivo, idParam.getValue(), sizeof(idDispositivo) - 1); idDispositivo[sizeof(idDispositivo) - 1] = '\0'; limparString(idDispositivo, sizeof(idDispositivo));
+        strncpy(phoneNumber, phoneParam.getValue(), sizeof(phoneNumber) - 1); phoneNumber[sizeof(phoneNumber) - 1] = '\0'; limparString(phoneNumber, sizeof(phoneNumber));
+        strncpy(whatsAppApiKey, apiWhatsAppParam.getValue(), sizeof(whatsAppApiKey) - 1); whatsAppApiKey[sizeof(whatsAppApiKey) - 1] = '\0'; limparString(whatsAppApiKey, sizeof(whatsAppApiKey));
         salvarConfiguracoes();
     }
     SPIFFS.end();
